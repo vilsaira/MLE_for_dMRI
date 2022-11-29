@@ -39,6 +39,7 @@ classdef dMLE
         iter_limit              uint32= 50; % This can't be large due regulator lambda (1.0e-5*5^(iter))
         lambda0                 single= 1e-5;
         rescaling               single= 5.0;
+        scalingFactor         single= 10000;
         % MLE params
         sumYSQ single
         iTheta single
@@ -82,7 +83,7 @@ classdef dMLE
             end
             
             [obj.bval, obj.bvec, obj.N] = set_bval_bvec(obj.path_bval, obj.path_bvec);
-            obj.X = set_design_matrix(obj.bval, obj.bvec, obj.model);
+            obj.X = set_design_matrix(obj.bval, obj.bvec, obj.model, obj.scalingFactor);
             [obj.mask_info, obj.mask] = set_mask(obj.path_mask);
             [obj.dwi_info, obj.dwi] = set_dwi(obj.path_dwi);
             
@@ -93,14 +94,25 @@ classdef dMLE
         
         function dMLE_save(obj, output_prefix)            
             % transform vectorized data to 3D
-            mask = reshape(obj.mask, obj.mask_info.ImageSize) > 0;
-            inds = find(mask);
+            mask = obj.mask > 0;
             sigmas = zeros(obj.mask_info.ImageSize, 'single');
             tmp = zeros(obj.mask_info.ImageSize, 'single');
             thetas = zeros([obj.mask_info.ImageSize, size(obj.X, 2)], 'single');
-            sigmas(inds) = obj.mlSigmaSQ;
+            
+            dwis = zeros(obj.dwi_info.ImageSize, 'single');
+            for i = 1:obj.dwi_info.ImageSize(4)
+                tmp(mask) = obj.dwi(i,:);
+                dwis(:,:,:,i) = tmp;
+            end
+                
+            
+            sigmas(mask) = obj.mlSigmaSQ;
             for i = 1:size(obj.X, 2)
-                tmp(inds) = obj.mlTheta(i,:);
+                if (i <= 7) && (i > 1)
+                    tmp(mask) = obj.iTheta(i,:) ./ obj.scalingFactor;
+                else
+                    tmp(mask) = obj.iTheta(i,:) ./ (obj.scalingFactor.^2);
+                end
                 thetas(:,:,:,i) = tmp;
             end
             sigma_info = obj.mask_info;
@@ -111,15 +123,19 @@ classdef dMLE
         end
                 
         function obj = dMLE_init(obj)
-            if size(obj.mask,2) > 1
-                % Mask dwi to remove non-brain voxels
-                obj.dwi = obj.dwi(repmat(obj.mask, 1, obj.dwi_info.ImageSize(4)) > 0);
-                % Vectorize mask and dwi
-                obj.mask = obj.mask(:);
-                n = sum(obj.mask);
-                obj.dwi = reshape(obj.dwi, n, ...
-                                        obj.dwi_info.ImageSize(4))';
+            
+            % Mask dwi to remove non-brain voxels and vectorize
+            dwi_vec = zeros(obj.dwi_info.ImageSize(4), sum(obj.mask(:)), 'single');
+            tmp = zeros(size(obj.mask), 'single');
+            for i = 1:obj.dwi_info.ImageSize(4)
+                tmp = obj.dwi(:,:,:,i);
+                dwi_vec(i,:) = tmp(obj.mask > 0);
             end
+            obj.dwi = dwi_vec;
+            
+            mask_vec = obj.mask(obj.mask > 0);
+            obj.mask = mask_vec;
+           
             % Calculate initial guess for MLE
             obj.sumYSQ = sum( obj.dwi.^2, 1);
             obj.iTheta = obj.X \ log(obj.dwi + eps);
@@ -127,6 +143,8 @@ classdef dMLE
         end
         
         function obj = dMLE_fit(obj)
+            
+            obj = obj.dMLE_init();
             
             nVoxels = size(obj.dwi,2);
             nDWIs = size(obj.dwi,1);
@@ -139,8 +157,8 @@ classdef dMLE
             ptxFilename = 'RicianMLE_single.ptx';
             kernel = parallel.gpu.CUDAKernel( ptxFilename, cudaFilename );
 
-            obj.mlTheta = single(obj.iTheta);
-            obj.mlSigmaSQ = single(obj.iSigmaSQ);
+            obj.mlTheta = zeros(size(obj.iTheta), 'single');
+            obj.mlSigmaSQ = zeros(size(obj.iSigmaSQ), 'single');
             nParams = size(obj.X, 2);
             nDeltaParams = nParams - 1;
             nCalc = ceil(nVoxels/10); % adjust 10 to higher number if memory runs out

@@ -1,4 +1,4 @@
-function X = set_design_matrix(bval, bvec, model)
+function X = set_design_matrix(bval, bvec, model, scalingFactor)
     N = length(bval);
     try
         switch model
@@ -18,6 +18,7 @@ function X = set_design_matrix(bval, bvec, model)
                        g3^2];
                    X( i, : ) = [ 1, -b_DT ];
                 end
+                X(:, 2:7) = X(:, 2:7)./scalingFactor;
             case 'KT'
                 X = zeros( N, 22);
                 for i = 1 : N
@@ -48,8 +49,10 @@ function X = set_design_matrix(bval, bvec, model)
                         12 * g1^2 * g2 * g3, ...
                         12 * g2^2 * g1 * g3, ...
                         12 * g3^2 * g1 * g2 ];
-                    X( i, : ) = [ 1, -b_DT, b_KT ] ;  
+                    X( i, : ) = [ 1, -b_DT, b_KT ] ;                      
                 end
+                X(:, 2:7) = X(:, 2:7)./scalingFactor;
+                X(:, 8:end) = X(:, 8:end)./(scalingFactor^2);
         end
     catch ME
         throw(ME);
