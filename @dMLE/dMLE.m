@@ -97,7 +97,7 @@ classdef dMLE
             % transform vectorized data to 3D
             mask = obj.mask > 0;
             sigmas = zeros(obj.mask_info.ImageSize, 'single');
-            thetas = zeros([obj.mask_info.ImageSize, size(obj.X, 2)], 'single');
+            thetas = zeros([obj.mask_info.ImageSize, size(obj.X, 2)], 'double');
                         
             % try to reverse vectorization
 %             dwis = zeros(obj.dwi_info.ImageSize, 'single');
@@ -108,7 +108,7 @@ classdef dMLE
 %             end
                 
             sigmas(mask) = obj.mlSigmaSQ;
-            tmp = zeros(obj.mask_info.ImageSize, 'single');
+            tmp = zeros(obj.mask_info.ImageSize, 'double');
             for i = 1:size(obj.X, 2)
                 if (i <= 7) && (i > 1)
                     tmp(mask) = obj.mlTheta(i,:) ./ obj.scalingFactor;
@@ -119,6 +119,8 @@ classdef dMLE
             end
             sigma_info = obj.mask_info;
             theta_info = obj.dwi_info;
+            theta_info.Datatype = 'double';
+            theta_info.BitsPerPixel = 64;
             theta_info.ImageSize(4) = size(obj.X, 2);
             niftiwrite(thetas, [output_prefix, '_params'], theta_info, 'Compressed', true);
             niftiwrite(sigmas, [output_prefix, '_sigmas'], sigma_info, 'Compressed', true);
