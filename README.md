@@ -7,6 +7,9 @@ References to cite if used:
 3) Sairanen, Viljami, Jia Liu, and Dario Gasbarra. "GPU Accelerated Maximum Likelihood Estimation of Diffusion and Kurtosis Tensors with the Rician Noise Model."
 
 A simple example:
+
 a = dMLE('dwi.nii.gz', 'KT', 'mask.nii.gz', 'bvals', 'bvecs');
+
 a = a.dMLE_fit();
+
 a.dMLE_save('output_prefix');
