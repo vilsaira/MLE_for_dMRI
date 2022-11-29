@@ -8,6 +8,5 @@ References to cite if used:
 
 A simple example:
 a = dMLE('dwi.nii.gz', 'KT', 'mask.nii.gz', 'bvals', 'bvecs');
-a = a.dMLE_init();
 a = a.dMLE_fit();
-a.dMLE_save();
+a.dMLE_save('output_prefix');

@@ -25,6 +25,7 @@ classdef dMLE
         dwi single;
         dwi_info;
         mask uint8;
+        mask_vec uint8;
         mask_info;
         % MLE options
         tolerance_sigmasq       single= 1e-4;
@@ -94,14 +95,18 @@ classdef dMLE
         
         function dMLE_save(obj, output_prefix)            
             % transform vectorized data to 3D
-            mask = reshape(obj.mask, obj.mask_info.ImageSize) > 0;            
+            mask = obj.mask > 0;
             sigmas = zeros(obj.mask_info.ImageSize, 'single');
             tmp = zeros(obj.mask_info.ImageSize, 'single');
             thetas = zeros([obj.mask_info.ImageSize, size(obj.X, 2)], 'single');
             
+
+            
+            % try to reverse vectorization
             dwis = zeros(obj.dwi_info.ImageSize, 'single');
             for i = 1:obj.dwi_info.ImageSize(4)
-                tmp(mask) = obj.dwi(i,:);
+                vol = zeros(obj.mask_info.ImageSize, 'single');
+                vol(obj.mask>0) = dwi_vec(i,:);
                 dwis(:,:,:,i) = tmp;
             end
                 
@@ -123,20 +128,16 @@ classdef dMLE
         end
                 
         function obj = dMLE_init(obj)
+            % Vectorize mask
+            obj.mask_vec = obj.mask(:);
             
-            % Mask dwi to remove non-brain voxels
+            % Mask dwi to remove non-brain voxels and vectorize
             dwi_vec = zeros(obj.dwi_info.ImageSize(4), sum(obj.mask(:)), 'single');
-            tmp = zeros(size(obj.mask), 'single');
             for i = 1:obj.dwi_info.ImageSize(4)
                 tmp = obj.dwi(:,:,:,i);
-                dwi_vec = tmp(obj.mask > 0);
-            end
-            obj.dwi = obj.dwi(repmat(obj.mask, 1, obj.dwi_info.ImageSize(4)) > 0);
-            % Vectorize mask and dwi
-            obj.mask = obj.mask(:);
-            n = sum(obj.mask);
-            obj.dwi = reshape(obj.dwi, n, ...
-                                    obj.dwi_info.ImageSize(4))';
+                dwi_vec(i,:) = tmp(obj.mask > 0);
+            end 
+            obj.dwi = dwi_vec;
            
             % Calculate initial guess for MLE
             obj.sumYSQ = sum( obj.dwi.^2, 1);

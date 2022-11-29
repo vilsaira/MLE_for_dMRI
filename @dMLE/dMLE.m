@@ -25,6 +25,7 @@ classdef dMLE
         dwi single;
         dwi_info;
         mask uint8;
+        mask_vec uint8;
         mask_info;
         % MLE options
         tolerance_sigmasq       single= 1e-4;
@@ -96,22 +97,23 @@ classdef dMLE
             % transform vectorized data to 3D
             mask = obj.mask > 0;
             sigmas = zeros(obj.mask_info.ImageSize, 'single');
-            tmp = zeros(obj.mask_info.ImageSize, 'single');
             thetas = zeros([obj.mask_info.ImageSize, size(obj.X, 2)], 'single');
-            
-            dwis = zeros(obj.dwi_info.ImageSize, 'single');
-            for i = 1:obj.dwi_info.ImageSize(4)
-                tmp(mask) = obj.dwi(i,:);
-                dwis(:,:,:,i) = tmp;
-            end
+                        
+            % try to reverse vectorization
+%             dwis = zeros(obj.dwi_info.ImageSize, 'single');
+%             for i = 1:obj.dwi_info.ImageSize(4)
+%                 vol = zeros(obj.mask_info.ImageSize, 'single');
+%                 vol(mask) = obj.dwi(i,:);
+%                 dwis(:,:,:,i) = vol;
+%             end
                 
-            
             sigmas(mask) = obj.mlSigmaSQ;
+            tmp = zeros(obj.mask_info.ImageSize, 'single');
             for i = 1:size(obj.X, 2)
                 if (i <= 7) && (i > 1)
-                    tmp(mask) = obj.iTheta(i,:) ./ obj.scalingFactor;
+                    tmp(mask) = obj.mlTheta(i,:) ./ obj.scalingFactor;
                 else
-                    tmp(mask) = obj.iTheta(i,:) ./ (obj.scalingFactor.^2);
+                    tmp(mask) = obj.mlTheta(i,:) ./ (obj.scalingFactor.^2);
                 end
                 thetas(:,:,:,i) = tmp;
             end
@@ -123,18 +125,16 @@ classdef dMLE
         end
                 
         function obj = dMLE_init(obj)
+            % Vectorize mask
+            obj.mask_vec = obj.mask(:);
             
             % Mask dwi to remove non-brain voxels and vectorize
             dwi_vec = zeros(obj.dwi_info.ImageSize(4), sum(obj.mask(:)), 'single');
-            tmp = zeros(size(obj.mask), 'single');
             for i = 1:obj.dwi_info.ImageSize(4)
                 tmp = obj.dwi(:,:,:,i);
                 dwi_vec(i,:) = tmp(obj.mask > 0);
-            end
+            end 
             obj.dwi = dwi_vec;
-            
-            mask_vec = obj.mask(obj.mask > 0);
-            obj.mask = mask_vec;
            
             % Calculate initial guess for MLE
             obj.sumYSQ = sum( obj.dwi.^2, 1);
