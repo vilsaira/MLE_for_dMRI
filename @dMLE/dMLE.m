@@ -27,6 +27,7 @@ classdef dMLE
         mask uint8;
         mask_vec uint8;
         mask_info;
+        need_to_init=true;
         % MLE options
         tolerance_sigmasq       single= 1e-4;
         tolerance_theta         single= 1e-4;
@@ -47,6 +48,9 @@ classdef dMLE
         iSigmaSQ single
         mlTheta single
         mlSigmaSQ single
+        % Cuda params
+        M = 4; % Adjust to split into more jobs if memory runs out. This should be as small as GPU global memory allows.
+        n_threads = 128; % Adjust on your own peril
     end
     
        
@@ -144,9 +148,14 @@ classdef dMLE
             obj.iSigmaSQ = sum(( obj.dwi - exp( obj.X * obj.iTheta )).^2); 
         end
         
-        function obj = dMLE_fit(obj)
+        function obj = dMLE_fit(obj, M, n_threads)
             
-            obj = obj.dMLE_init();
+            obj.M = M;
+            obj.n_threads = n_threads;
+            if obj.need_to_init
+                obj = obj.dMLE_init();
+                obj.need_to_init = false;
+            end
             
             nVoxels = size(obj.dwi,2);
             nDWIs = size(obj.dwi,1);
@@ -158,12 +167,17 @@ classdef dMLE
             cudaFilename = 'RicianMLE_single.cu';
             ptxFilename = 'RicianMLE_single.ptx';
             kernel = parallel.gpu.CUDAKernel( ptxFilename, cudaFilename );
+%             n_threads = 256;
+            nCalc = ceil(nVoxels/obj.M); % adjust 10 to higher number if memory runs out
+            n_blocks = ceil((nCalc+255)/obj.n_threads);
+            kernel.ThreadBlockSize = obj.n_threads;                
+            kernel.GridSize = n_blocks;
+            disp(['Threads ', num2str(obj.n_threads), ', blocks ', num2str(n_blocks)]);
 
             obj.mlTheta = zeros(size(obj.iTheta), 'single');
             obj.mlSigmaSQ = zeros(size(obj.iSigmaSQ), 'single');
             nParams = size(obj.X, 2);
             nDeltaParams = nParams - 1;
-            nCalc = ceil(nVoxels/10); % adjust 10 to higher number if memory runs out
 
             fprintf(1, '\nDone:   %d%s\nTime remaining: ???:??\nEstimated time: ???:??', 0, '%');
             tic
@@ -232,9 +246,8 @@ classdef dMLE
             %     reset(G); % Just in case...
             %     kernel = parallel.gpu.CUDAKernel( ptxFilename, cudaFilename ); 
             %     kernel.ThreadBlockSize = [kernel.MaxThreadsPerBlock, 1, 1];
-                kernel.ThreadBlockSize = [kernel.MaxThreadsPerBlock, 1];
-            %     kernel.ThreadBlockSize = [64, 1];
-                kernel.GridSize = [ceil(blockVoxs/kernel.ThreadBlockSize(1)), 1];
+  %              MPC = G.MultiprocessorCount; % Max number of parallel Blocks in grid
+ %               MTPB = kernel.MaxThreadsPerBlock; % Max number of threads in one Block
 
                 [blockTheta, blockSigmaSQ] = feval( kernel,...
                 single(blockTheta), ...
