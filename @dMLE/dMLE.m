@@ -122,6 +122,8 @@ classdef dMLE
                 thetas(:,:,:,i) = tmp;
             end
             sigma_info = obj.mask_info;
+            sigma_info.Datatype = 'single';
+            sigma_info.BitsPerPixel = 32;
             theta_info = obj.dwi_info;
             theta_info.Datatype = 'double';
             theta_info.BitsPerPixel = 64;
@@ -135,7 +137,7 @@ classdef dMLE
             obj.mask_vec = obj.mask(:);
             
             % Mask dwi to remove non-brain voxels and vectorize
-            dwi_vec = zeros(obj.dwi_info.ImageSize(4), sum(obj.mask(:)), 'single');
+            dwi_vec = zeros(obj.dwi_info.ImageSize(4), sum(obj.mask(:)>0), 'single');
             for i = 1:obj.dwi_info.ImageSize(4)
                 tmp = obj.dwi(:,:,:,i);
                 dwi_vec(i,:) = tmp(obj.mask > 0);
@@ -169,10 +171,11 @@ classdef dMLE
             kernel = parallel.gpu.CUDAKernel( ptxFilename, cudaFilename );
 %             n_threads = 256;
             nCalc = ceil(nVoxels/obj.M); % adjust 10 to higher number if memory runs out
-            n_blocks = ceil((nCalc+255)/obj.n_threads);
+%            n_blocks = ceil((nCalc+255)/prod(obj.n_threads));
+            n_blocks = ceil(nCalc/prod(obj.n_threads));
             kernel.ThreadBlockSize = obj.n_threads;                
             kernel.GridSize = n_blocks;
-            disp(['Threads ', num2str(obj.n_threads), ', blocks ', num2str(n_blocks)]);
+            disp(['Threads ', num2str(obj.n_threads), ', blocks ', num2str(n_blocks), ', nCalc ', num2str(nCalc)]);
 
             obj.mlTheta = zeros(size(obj.iTheta), 'single');
             obj.mlSigmaSQ = zeros(size(obj.iSigmaSQ), 'single');
@@ -354,6 +357,7 @@ classdef dMLE
                 end
                 fprintf(1, [repmat('\b', [1,56]), 'Done: %s%s\nTime remaining: %s:%s\nEstimated time: %s:%s'], strD, '%', strMrem, strSrem, strMest, strSest);
 
+%                 pause
             end
             fprintf(1, '\n');
     
